@@ -1,4 +1,4 @@
-package com.example.taalapppt2.ui.theme // Package name set to taalapppt2
+package com.example.taalapppt2.ui.theme
 
 import android.app.Activity
 import android.os.Build
@@ -14,8 +14,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import android.view.Window // Already added for 'window'
-import androidx.compose.ui.graphics.Color // <--- ADD THIS IMPORT!
+import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
@@ -40,9 +39,8 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun Taalapppt2Theme( // Theme name updated
+fun Taalapppt2Theme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
@@ -60,14 +58,13 @@ fun Taalapppt2Theme( // Theme name updated
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = Color.Transparent.toArgb()
-            // Adjust for light/dark status bar icons
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography, // Assuming Typography is defined (usually in Type.kt)
+        typography = Typography,
         content = content
     )
 }
