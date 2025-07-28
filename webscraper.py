@@ -817,25 +817,63 @@ def bulk_scrape():
     """Bulk scrape Taal Volcano data from paginated URLs and save to CSV"""
     try:
         # Initialize CSV file with headers
-        csv_filename = f'taal_volcano_bulletin_data.csv'
-        csv_headers = ['Date', 'Alert_Level', 'Eruption', 'Seismicity', 'Acidity', 
-                      'Temperature', 'Sulfur_Dioxide_Flux', 'Plume', 'Ground_Deformation', 'Iframe_Source']
+        csv_filename = 'taal_volcano_bulletin_data.csv'
+        csv_headers = ['Date', 'Alert_Level', 'Eruption', 'Seismicity', 'Acidity', 'Temperature',
+                       'Sulfur_Dioxide_Flux', 'Plume', 'Ground_Deformation', 'Iframe_Source']
         
-        ### Old Create CSV file
-        #with open(csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
-        #    writer = csv.writer(csvfile, delimiter='\\')
-        #    writer.writerow(csv_headers)
+        # Check if CSV exists and get the latest date
+        latest_date_in_csv = None
+        csv_exists = os.path.exists(csv_filename)
         
-        # New Create CSV file
-        with open(csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(csv_headers)
+        if csv_exists:
+            try:
+                with open(csv_filename, 'r', encoding='utf-8') as csvfile:
+                    reader = csv.reader(csvfile)
+                    next(reader)  # Skip header
+                    dates = []
+                    rows = list(reader)  # Read all rows into memory
+                    
+                    for row in rows:
+                        if row and row[0] != '0':  # Skip empty or placeholder dates
+                            try:
+                                # Parse date in format "28 July 2025"
+                                parsed_date = datetime.strptime(row[0], '%d %B %Y')
+                                dates.append(parsed_date)
+                            except ValueError:
+                                continue
+                    
+                    if dates:
+                        latest_date_in_csv = max(dates)
+                        print(f"Latest date in CSV: {latest_date_in_csv.strftime('%d %B %Y')}")
+            except Exception as e:
+                print(f"Error reading existing CSV: {str(e)}")
+                latest_date_in_csv = None
+        
+        # Get current date
+        current_date = datetime.now().date()
+        
+        # Check if we need to scrape
+        if latest_date_in_csv and latest_date_in_csv.date() >= current_date:
+            return jsonify({
+                'success': True,
+                'message': f'Data is up to date. Latest date in CSV: {latest_date_in_csv.strftime("%d %B %Y")}',
+                'csv_filename': csv_filename,
+                'total_pages_processed': 0,
+                'total_data_entries': 0
+            })
+        
+        # Create or prepare CSV file if not exists
+        if not csv_exists:
+            with open(csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(csv_headers)
         
         total_processed = 0
         total_data_entries = 0
+        new_data_rows = []
         
         # Iterate through paginated URLs
-        for n in range(0, 3411, 10):  # n=0 to n=3000, increment by 10
+        for n in range(0, 3411, 10):  # n=0 to n=3410, increment by 10
             base_url = f"https://www.phivolcs.dost.gov.ph/index.php/volcano-hazard/volcano-bulletin2/taal-volcano?start={n}"
             
             try:
@@ -874,6 +912,19 @@ def bulk_scrape():
                 for link in bulletin_links:
                     try:
                         print(f"Deep scraping: {link['url']}")
+                        
+                        # Extract date from the bulletin text or URL
+                        date_extracted = extract_date_from_text(link['text']) or extract_date_from_url(link['url'])
+                        
+                        # Skip if we already have this date or if it's older than our latest date
+                        if date_extracted and latest_date_in_csv:
+                            try:
+                                extracted_date_obj = datetime.strptime(date_extracted, '%d %B %Y')
+                                if extracted_date_obj <= latest_date_in_csv:
+                                    print(f"Skipping {date_extracted} - already have newer or equal data")
+                                    continue
+                            except ValueError:
+                                pass  # Continue processing if date parsing fails
                         
                         # Perform deep scraping on the bulletin link
                         link_response = requests.get(link['url'], verify=False, timeout=15)
@@ -914,9 +965,6 @@ def bulk_scrape():
                                 # NEW PARSING METHOD: Look for PARAMETERS section
                                 volcanic_data = parse_unified_volcanic_data(iframe_soup)
                                 
-                                # Extract date from the bulletin text or URL
-                                date_extracted = extract_date_from_text(link['text']) or extract_date_from_url(link['url'])
-                                
                                 # Prepare CSV row data
                                 csv_row = [
                                     date_extracted or '0',
@@ -931,16 +979,8 @@ def bulk_scrape():
                                     iframe_src or '0'
                                 ]
                                 
-                                ### Previous code for append
-                                #with open(csv_filename, 'a', newline='', encoding='utf-8') as csvfile:
-                                #    writer = csv.writer(csvfile, delimiter='\\')
-                                #    writer.writerow(csv_row)
-
-
-                                # Append to CSV
-                                with open(csv_filename, 'a', newline='', encoding='utf-8') as csvfile:
-                                    writer = csv.writer(csvfile)
-                                    writer.writerow(csv_row)
+                                # Append new data row to the list
+                                new_data_rows.append(csv_row)
                                 
                                 total_data_entries += 1
                                 print(f"Data saved for: {date_extracted}")
@@ -964,6 +1004,26 @@ def bulk_scrape():
                 print(f"Error processing page {base_url}: {str(e)}")
                 continue
         
+        # Read existing data from the CSV to avoid duplicates
+        all_rows = []
+        if csv_exists:
+            with open(csv_filename, 'r', encoding='utf-8') as csvfile:
+                reader = csv.reader(csvfile)
+                next(reader)  # Skip header
+                all_rows = list(reader)
+        
+        # Combine existing data with the new data
+        all_rows.extend(new_data_rows)
+        
+        # Sort all rows by the date column (latest to earliest)
+        all_rows.sort(key=lambda row: datetime.strptime(row[0], '%d %B %Y'), reverse=True)
+        
+        # Rewrite the CSV file with updated data
+        with open(csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(csv_headers)  # Write headers
+            writer.writerows(all_rows)  # Write sorted rows
+        
         return jsonify({
             'success': True,
             'message': f'Bulk scraping completed. Processed {total_processed} pages, saved {total_data_entries} data entries.',
@@ -974,6 +1034,7 @@ def bulk_scrape():
         
     except Exception as e:
         return jsonify({'error': f'Bulk scraping failed: {str(e)}'}), 500
+
 
 def parse_parameters_table(soup):
     """Legacy wrapper for backward compatibility"""
