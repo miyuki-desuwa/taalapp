@@ -649,17 +649,6 @@ fun ActivityReportScreen(onBackClick: () -> Unit) {
                     description = "${data.getVolcanicEarthquakesCount() ?: "N/A"} volcanic earthquakes including ${data.getVolcanicTremorsCount() ?: "N/A"} volcanic tremors (${data.getVolcanicTremorsDuration()})"
                 )
 
-                ReportDataCard(
-                    iconResId = 0,
-                    title = "Warning",
-                    description = """
-                        - Sudden steam or phreatic explosions
-                        - Volcanic earthquakes
-                        - Light ashfall
-                        - Accumulation or emission of toxic gases
-                        """.trimIndent(),
-                    isWarning = true
-                )
 
                 ReportDataCard(
                     iconResId = R.drawable.sodium_dioxide,
